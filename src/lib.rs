@@ -1,9 +1,10 @@
+use std::sync::Arc;
 use std::sync::Mutex;
 use thiserror::Error;
 
 #[allow(dead_code)]
 pub struct Log {
-    records: Mutex<Vec<Record>>,
+    records: Mutex<Vec<Arc<Record>>>,
 }
 
 #[derive(Error, Debug)]
@@ -27,16 +28,15 @@ impl Log {
         }
     }
 
-    pub fn append(&self, record: &Record) -> Result<usize, LogError> {
+    pub fn append(&self, mut record: Record) -> Result<usize, LogError> {
         let mut guard = self.records.lock().unwrap();
         let offset = guard.len();
-        let mut copy = record.clone();
-        copy.offset = offset;
-        guard.push(copy);
+        record.offset = offset;
+        guard.push(Arc::new(record));
         Ok(offset)
     }
 
-    pub fn read(&self, offset: usize) -> Result<Record, LogError> {
+    pub fn read(&self, offset: usize) -> Result<Arc<Record>, LogError> {
         let guard = self.records.lock().unwrap();
         if offset >= guard.len() {
             Err(LogError::new("Provided offset is invalid"))
@@ -66,14 +66,14 @@ impl LogError {
 fn test_append() {
     let log = Log::new();
     let record = Record::new(vec![127]);
-    assert_eq!(log.append(&record).unwrap(), 0)
+    assert_eq!(log.append(record).unwrap(), 0)
 }
 
 #[test]
 fn test_read() {
     let log = Log::new();
     let record = Record::new(vec![127]);
-    let offset = log.append(&record).unwrap();
+    let offset = log.append(record).unwrap();
     let r = log.read(offset).unwrap();
-    assert_eq!(r.value, record.value);
+    assert_eq!(r.value, vec![127]);
 }
