@@ -1,10 +1,14 @@
 use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use thiserror::Error;
 
-#[allow(dead_code)]
+/// Implements the append-only log data structure.
+/// This implementation takes the ownership of the stored data
+/// and returns the atomic reference count to it when reading.
+/// The data survives past the Log instance destruction.
 pub struct Log {
-    records: Mutex<Vec<Arc<Record>>>,
+    /// RwLock-protected list of record atomic references
+    records: RwLock<Vec<Arc<Record>>>,
 }
 
 #[derive(Error, Debug)]
@@ -13,23 +17,20 @@ pub struct LogError {
     message: String,
 }
 
-#[allow(dead_code)]
-#[derive(Clone)]
 pub struct Record {
     value: Vec<u8>,
     offset: usize,
 }
 
-#[allow(unused_variables)]
 impl Log {
     pub fn new() -> Log {
         Log {
-            records: Mutex::new(vec![]),
+            records: RwLock::new(vec![]),
         }
     }
 
     pub fn append(&self, mut record: Record) -> Result<usize, LogError> {
-        let mut guard = self.records.lock().unwrap();
+        let mut guard = self.records.write().unwrap();
         let offset = guard.len();
         record.offset = offset;
         guard.push(Arc::new(record));
@@ -37,7 +38,7 @@ impl Log {
     }
 
     pub fn read(&self, offset: usize) -> Result<Arc<Record>, LogError> {
-        let guard = self.records.lock().unwrap();
+        let guard = self.records.read().unwrap();
         if offset >= guard.len() {
             Err(LogError::new("Provided offset is invalid"))
         } else {
